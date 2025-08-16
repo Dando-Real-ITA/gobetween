@@ -40,29 +40,44 @@ func Sniff(conn net.Conn, readTimeout time.Duration) (net.Conn, string, error) {
 	buf := pool.Get().([]byte)
 	defer pool.Put(buf)
 
-	err := conn.SetReadDeadline(time.Now().Add(readTimeout))
-	if err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		return nil, "", err
 	}
+	defer conn.SetReadDeadline(time.Time{}) // reset at the end
 
-	i, err := conn.Read(buf)
+	total := 0
+	var hostname string
 
-	if err != nil {
-		return nil, "", err
+	// Try catch TLS ClientHello
+	for total < len(buf) {
+		n, err := conn.Read(buf[total:])
+		total += n
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, "", err
+		}
+
+		if total >= 5 { // 5 is TLS record header size
+
+			if buf[0] != 0x16 { // check if it's a TLS handshake
+				break
+			}
+
+			if h := extractHostname(buf[:total]); h != "" {
+				hostname = h
+				break
+			}
+		}
+
 	}
 
-	err = conn.SetReadDeadline(time.Time{}) // Reset read deadline
-	if err != nil {
-		return nil, "", err
-	}
-
-	hostname := extractHostname(buf[0:i])
-
-	data := make([]byte, i)
-	copy(data, buf) // Since we reuse buf between invocations, we have to make copy of data
+	// replay preread bytes
+	data := make([]byte, total)
+	copy(data, buf[:total]) // copy only what we read
 	mreader := io.MultiReader(bytes.NewBuffer(data), conn)
 
-	// Wrap connection so that it will Read from buffer first and remaining data
-	// from initial conn
-	return Conn{mreader, conn}, hostname, nil
+	return Conn{reader: mreader, Conn: conn}, hostname, nil
 }
