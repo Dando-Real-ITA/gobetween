@@ -644,11 +644,11 @@ func expandBinds(name string, cfg config.Server) (map[string]config.Server, erro
 		}
 
 		// Sanitize the host for use in a server name (IPv6 addresses contain ':').
-		safeName := strings.ReplaceAll(host, ":", "-")
+		sanitizedHost := strings.ReplaceAll(host, ":", "-")
 
 		// Render the expanded server name.
 		var buf bytes.Buffer
-		data := bindNameData{Name: name, Host: safeName, Port: port, Index: i}
+		data := bindNameData{Name: name, Host: sanitizedHost, Port: port, Index: i}
 		var childName string
 		if err := tmpl.Execute(&buf, data); err != nil {
 			log.Warnf("Failed to render bind_name_template for server %s bind %s: %v; falling back to index-based name", name, addr, err)
