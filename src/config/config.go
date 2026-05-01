@@ -102,6 +102,18 @@ type Server struct {
 	// hostname:port
 	Bind string `toml:"bind" json:"bind"`
 
+	// Multiple bind addresses; expanded into separate listeners at startup.
+	// Mutually exclusive with Bind.
+	Binds []string `toml:"binds" json:"binds"`
+
+	// When true, rewrite static discovery backend ports to match each bind's port
+	MatchPort bool `toml:"match_port" json:"match_port"`
+
+	// Go template for naming expanded servers (when binds is used).
+	// Available variables: .Name, .Host, .Port, .Index
+	// Default: "{{.Name}}_{{.Host}}_{{.Port}}"
+	BindNameTemplate string `toml:"bind_name_template" json:"bind_name_template"`
+
 	// tcp | udp | tls
 	Protocol string `toml:"protocol" json:"protocol"`
 

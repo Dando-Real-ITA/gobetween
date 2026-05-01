@@ -113,9 +113,26 @@ protocol = "udp"
 
 #[servers.default]
 #
-#bind = "localhost:3000"     #  (required) "<host>:<port>"
+#bind = "localhost:3000"     #  (required) "<host>:<port>"  -- mutually exclusive with 'binds'
 #protocol = "tcp"            #  (required) "tcp" | "tls" | "udp"
 #balance = "weight"          #  (optional [weight]) "weight" | "leastconn" | "roundrobin" | "iphash" | "iphash1" | "leastbandwidth"
+#
+## Multiple bind addresses (expanded into separate listeners at startup).
+## Mutually exclusive with 'bind'.
+#binds = [                   #  (optional) list of "<host>:<port>" strings; IPv6 addresses must be bracketed, e.g. "[::1]:443"
+#    "1.2.3.4:443",
+#    "5.6.7.8:443",
+#    "[2001:db8::1]:443",
+#]
+#
+## When true, each expanded listener's static discovery backend ports are
+## automatically rewritten to match the bind port (no-op for non-static discovery).
+#match_port = false          #  (optional) true | false
+#
+## Go text/template for naming each expanded server when 'binds' is used.
+## Available variables: {{.Name}} {{.Host}} {{.Port}} {{.Index}}
+## Default: "{{.Name}}_{{.Host}}_{{.Port}}"
+#bind_name_template = "{{.Name}}_{{.Host}}_{{.Port}}"  #  (optional)
 #
 #max_connections = 0
 #client_idle_timeout = "10m"

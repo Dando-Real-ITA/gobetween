@@ -7,12 +7,16 @@ package manager
  */
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/yyyar/gobetween/config"
@@ -61,9 +65,14 @@ func Initialize(cfg config.Config) {
 
 	// Go through config and start servers for each server
 	for name, serverCfg := range cfg.Servers {
-		err := Create(name, serverCfg)
+		expanded, err := expandBinds(name, serverCfg)
 		if err != nil {
 			log.Fatal(err)
+		}
+		for ename, ecfg := range expanded {
+			if err := Create(ename, ecfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -262,6 +271,10 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 
 	if server.Bind == "" {
 		return config.Server{}, errors.New("No bind specified for server " + name)
+	}
+
+	if len(server.Binds) > 0 {
+		return config.Server{}, errors.New("Cannot use both 'bind' and 'binds' for server " + name + "; use one or the other")
 	}
 
 	if server.Discovery == nil {
@@ -582,4 +595,108 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 	}
 
 	return server, nil
+}
+
+/**
+ * bindNameData holds the template variables available in bind_name_template.
+ */
+type bindNameData struct {
+	Name  string
+	Host  string
+	Port  string
+	Index int
+}
+
+/**
+ * expandBinds splits a server config that uses the `binds` list into one
+ * config entry per address.  If `binds` is empty the original config is
+ * returned unchanged (backward-compatible path).
+ */
+func expandBinds(name string, cfg config.Server) (map[string]config.Server, error) {
+	result := map[string]config.Server{}
+
+	if len(cfg.Binds) == 0 {
+		// Legacy single-bind path — pass through unchanged.
+		result[name] = cfg
+		return result, nil
+	}
+
+	if cfg.Bind != "" {
+		return nil, fmt.Errorf("cannot use both 'bind' and 'binds' for server %s; use one or the other", name)
+	}
+
+	// Determine the name template.
+	tmplStr := cfg.BindNameTemplate
+	if tmplStr == "" {
+		tmplStr = "{{.Name}}_{{.Host}}_{{.Port}}"
+	}
+	tmpl, err := template.New("bindname").Parse(tmplStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid bind_name_template for server %s: %v", name, err)
+	}
+
+	log := logging.For("manager")
+
+	for i, addr := range cfg.Binds {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid bind address %q in server %s: %v", addr, name, err)
+		}
+
+		// Sanitize the host for use in a server name (IPv6 addresses contain ':').
+		safeName := strings.ReplaceAll(host, ":", "-")
+
+		// Render the expanded server name.
+		var buf bytes.Buffer
+		data := bindNameData{Name: name, Host: safeName, Port: port, Index: i}
+		var childName string
+		if err := tmpl.Execute(&buf, data); err != nil {
+			log.Warnf("Failed to render bind_name_template for server %s bind %s: %v; falling back to index-based name", name, addr, err)
+			childName = fmt.Sprintf("%s_%d", name, i)
+		} else {
+			childName = buf.String()
+		}
+
+		child := cfg
+		child.Bind = addr
+		child.Binds = nil
+
+		if cfg.MatchPort {
+			child.Discovery = rewriteStaticListPorts(child.Discovery, port)
+		}
+
+		result[childName] = child
+	}
+
+	return result, nil
+}
+
+/**
+ * rewriteStaticListPorts returns a deep-copied DiscoveryConfig where every
+ * entry in the static_list has its port replaced with the given port.
+ * It is a no-op for non-static discovery kinds.
+ */
+func rewriteStaticListPorts(d *config.DiscoveryConfig, port string) *config.DiscoveryConfig {
+	if d == nil || d.Kind != "static" || d.StaticDiscoveryConfig == nil {
+		return d
+	}
+
+	newStatic := make([]string, len(d.StaticDiscoveryConfig.StaticList))
+	for i, entry := range d.StaticDiscoveryConfig.StaticList {
+		// Entry format: "host:port [weight=N] [priority=N] ..."
+		parts := strings.Fields(entry)
+		if len(parts) > 0 {
+			host, _, err := net.SplitHostPort(parts[0])
+			if err == nil {
+				parts[0] = net.JoinHostPort(host, port)
+			}
+		}
+		newStatic[i] = strings.Join(parts, " ")
+	}
+
+	newD := *d
+	sc := *d.StaticDiscoveryConfig
+	sc.StaticList = newStatic
+	newD.StaticDiscoveryConfig = &sc
+	return &newD
 }
