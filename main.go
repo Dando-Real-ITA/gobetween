@@ -79,11 +79,11 @@ func main() {
 		// Configure logging
 		logging.Configure(cfg.Logging.Output, cfg.Logging.Level, cfg.Logging.Format)
 
+		/* setup metrics before starting manager to avoid race conditions */
+		metrics.Start((*cfg).Metrics)
+
 		// Start manager
 		manager.Initialize(*cfg)
-
-		/* setup metrics */
-		metrics.Start((*cfg).Metrics)
 
 		// Start API
 		api.Start((*cfg).Api)

@@ -192,7 +192,7 @@ func Start(cfg config.MetricsConfig) {
 }
 
 func RemoveServer(server string, backends map[core.Target]*core.Backend) {
-	if metricsDisabled {
+	if metricsDisabled || serverCount == nil {
 		return
 	}
 
@@ -209,7 +209,7 @@ func RemoveServer(server string, backends map[core.Target]*core.Backend) {
 }
 
 func RemoveBackend(server string, backend *core.Backend) {
-	if metricsDisabled {
+	if metricsDisabled || backendActiveConnections == nil {
 		return
 	}
 
@@ -224,7 +224,7 @@ func RemoveBackend(server string, backend *core.Backend) {
 }
 
 func ReportHandleBackendLiveChange(server string, target core.Target, live bool) {
-	if metricsDisabled {
+	if metricsDisabled || backendLive == nil {
 		return
 	}
 
@@ -237,7 +237,7 @@ func ReportHandleBackendLiveChange(server string, target core.Target, live bool)
 }
 
 func ReportHandleConnectionsChange(server string, connections uint) {
-	if metricsDisabled {
+	if metricsDisabled || serverActiveConnections == nil {
 		return
 	}
 
@@ -245,7 +245,7 @@ func ReportHandleConnectionsChange(server string, connections uint) {
 }
 
 func ReportHandleStatsChange(server string, bs counters.BandwidthStats) {
-	if metricsDisabled {
+	if metricsDisabled || serverRxTotal == nil {
 		return
 	}
 
@@ -256,7 +256,7 @@ func ReportHandleStatsChange(server string, bs counters.BandwidthStats) {
 }
 
 func ReportHandleBackendStatsChange(server string, target core.Target, backends map[core.Target]*core.Backend) {
-	if metricsDisabled {
+	if metricsDisabled || backendRxBytes == nil {
 		return
 	}
 
@@ -271,7 +271,7 @@ func ReportHandleBackendStatsChange(server string, target core.Target, backends 
 }
 
 func ReportHandleOp(server string, target core.Target, backends map[core.Target]*core.Backend) {
-	if metricsDisabled {
+	if metricsDisabled || backendActiveConnections == nil {
 		return
 	}
 
