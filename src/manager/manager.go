@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +36,8 @@ var servers = struct {
 	m map[string]core.Server
 }{m: make(map[string]core.Server)}
 
+var operations sync.Mutex
+
 /* default configuration for server */
 var defaults config.ConnectionOptions
 
@@ -54,8 +58,7 @@ func Initialize(cfg config.Config) {
 	originalCfg = cfg
 
 	// save defaults for futher reuse
-	defaults = cfg.Defaults
-	initDefaults()
+	defaults = normalizeDefaults(cfg.Defaults)
 
 	//Initialize global sections
 	initConfigGlobals(&cfg)
@@ -70,7 +73,7 @@ func Initialize(cfg config.Config) {
 			log.Fatal(err)
 		}
 		for ename, ecfg := range expanded {
-			if err := Create(ename, ecfg); err != nil {
+			if err := create(ename, ecfg, defaults); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -82,26 +85,27 @@ func Initialize(cfg config.Config) {
 	log.Info("Initialized")
 }
 
-func initDefaults() {
-	//defaults
-	if defaults.MaxConnections == nil {
-		defaults.MaxConnections = new(int)
+func normalizeDefaults(value config.ConnectionOptions) config.ConnectionOptions {
+	if value.MaxConnections == nil {
+		value.MaxConnections = new(int)
 	}
 
-	if defaults.ClientIdleTimeout == nil {
-		defaults.ClientIdleTimeout = new(string)
-		*defaults.ClientIdleTimeout = "0"
+	if value.ClientIdleTimeout == nil {
+		value.ClientIdleTimeout = new(string)
+		*value.ClientIdleTimeout = "0"
 	}
 
-	if defaults.BackendIdleTimeout == nil {
-		defaults.BackendIdleTimeout = new(string)
-		*defaults.BackendIdleTimeout = "0"
+	if value.BackendIdleTimeout == nil {
+		value.BackendIdleTimeout = new(string)
+		*value.BackendIdleTimeout = "0"
 	}
 
-	if defaults.BackendConnectionTimeout == nil {
-		defaults.BackendConnectionTimeout = new(string)
-		*defaults.BackendConnectionTimeout = "0"
+	if value.BackendConnectionTimeout == nil {
+		value.BackendConnectionTimeout = new(string)
+		*value.BackendConnectionTimeout = "0"
 	}
+
+	return value
 }
 
 func initConfigGlobals(cfg *config.Config) {
@@ -191,7 +195,12 @@ func Get(name string) interface{} {
  * Create new server and launch it
  */
 func Create(name string, cfg config.Server) error {
+	operations.Lock()
+	defer operations.Unlock()
+	return create(name, cfg, defaults)
+}
 
+func create(name string, cfg config.Server, cfgDefaults config.ConnectionOptions) error {
 	servers.Lock()
 	defer servers.Unlock()
 
@@ -199,7 +208,7 @@ func Create(name string, cfg config.Server) error {
 		return errors.New("Server with this name already exists: " + name)
 	}
 
-	c, err := prepareConfig(name, cfg, defaults)
+	c, err := prepareConfig(name, cfg, cfgDefaults)
 	if err != nil {
 		return err
 	}
@@ -230,7 +239,12 @@ func Create(name string, cfg config.Server) error {
  * Delete server stopping all active connections
  */
 func Delete(name string) error {
+	operations.Lock()
+	defer operations.Unlock()
+	return deleteServer(name)
+}
 
+func deleteServer(name string) error {
 	servers.Lock()
 	defer servers.Unlock()
 
@@ -247,6 +261,192 @@ func Delete(name string) error {
 	}
 
 	return nil
+}
+
+type reloadPlan struct {
+	Added    []string
+	Modified []string
+	Removed  []string
+}
+
+func Reload(cfg config.Config) error {
+	operations.Lock()
+	defer operations.Unlock()
+
+	log := logging.For("manager")
+	log.Info("Reloading configuration...")
+
+	nextCfg := cfg
+	initConfigGlobals(&nextCfg)
+	nextDefaults := normalizeDefaults(cfg.Defaults)
+
+	nextPrepared, nextRaw, err := prepareExpandedServers(nextCfg, nextDefaults)
+	if err != nil {
+		return err
+	}
+
+	currentPrepared := currentServerConfigs()
+	currentRaw, err := rawExpandedServers(originalCfg)
+	if err != nil {
+		return err
+	}
+
+	plan := planReload(currentPrepared, nextPrepared)
+	warnUnsupportedReloadChanges(log, originalCfg, cfg)
+
+	if len(plan.Added) == 0 && len(plan.Modified) == 0 && len(plan.Removed) == 0 {
+		defaults = nextDefaults
+		originalCfg = mergeReloadableConfig(originalCfg, cfg)
+		log.Info("Reload completed: no server changes detected")
+		return nil
+	}
+
+	log.Infof("Reload plan: add=%v modify=%v remove=%v", plan.Added, plan.Modified, plan.Removed)
+
+	replaced := append([]string{}, plan.Modified...)
+	replaced = append(replaced, plan.Removed...)
+
+	for _, name := range replaced {
+		if err := deleteServer(name); err != nil {
+			return err
+		}
+	}
+
+	created := make([]string, 0, len(plan.Added)+len(plan.Modified))
+	for _, name := range append(append([]string{}, plan.Added...), plan.Modified...) {
+		if err := create(name, nextRaw[name], nextDefaults); err != nil {
+			rollbackErr := rollbackReload(created, replaced, currentRaw, defaults)
+			if rollbackErr != nil {
+				return fmt.Errorf("reload failed for %s: %v (rollback failed: %v)", name, err, rollbackErr)
+			}
+			return fmt.Errorf("reload failed for %s: %v", name, err)
+		}
+		created = append(created, name)
+	}
+
+	defaults = nextDefaults
+	originalCfg = mergeReloadableConfig(originalCfg, cfg)
+	log.Info("Reload completed")
+	return nil
+}
+
+func rollbackReload(created, replaced []string, currentRaw map[string]config.Server, currentDefaults config.ConnectionOptions) error {
+	for i := len(created) - 1; i >= 0; i-- {
+		if err := deleteServer(created[i]); err != nil {
+			return err
+		}
+	}
+
+	for _, name := range replaced {
+		cfg, ok := currentRaw[name]
+		if !ok {
+			continue
+		}
+		if err := create(name, cfg, currentDefaults); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func currentServerConfigs() map[string]config.Server {
+	result := map[string]config.Server{}
+
+	servers.RLock()
+	defer servers.RUnlock()
+
+	for name, server := range servers.m {
+		result[name] = server.Cfg()
+	}
+
+	return result
+}
+
+func rawExpandedServers(cfg config.Config) (map[string]config.Server, error) {
+	result := map[string]config.Server{}
+
+	for name, serverCfg := range cfg.Servers {
+		expanded, err := expandBinds(name, serverCfg)
+		if err != nil {
+			return nil, err
+		}
+		for expandedName, expandedCfg := range expanded {
+			if _, exists := result[expandedName]; exists {
+				return nil, fmt.Errorf("server with this name already exists: %s", expandedName)
+			}
+			result[expandedName] = expandedCfg
+		}
+	}
+
+	return result, nil
+}
+
+func prepareExpandedServers(cfg config.Config, cfgDefaults config.ConnectionOptions) (map[string]config.Server, map[string]config.Server, error) {
+	raw, err := rawExpandedServers(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	prepared := make(map[string]config.Server, len(raw))
+	for name, serverCfg := range raw {
+		ready, err := prepareConfig(name, serverCfg, cfgDefaults)
+		if err != nil {
+			return nil, nil, err
+		}
+		prepared[name] = ready
+	}
+
+	return prepared, raw, nil
+}
+
+func planReload(current, desired map[string]config.Server) reloadPlan {
+	plan := reloadPlan{}
+
+	for name, currentCfg := range current {
+		desiredCfg, ok := desired[name]
+		if !ok {
+			plan.Removed = append(plan.Removed, name)
+			continue
+		}
+		if !reflect.DeepEqual(currentCfg, desiredCfg) {
+			plan.Modified = append(plan.Modified, name)
+		}
+	}
+
+	for name := range desired {
+		if _, ok := current[name]; !ok {
+			plan.Added = append(plan.Added, name)
+		}
+	}
+
+	sort.Strings(plan.Added)
+	sort.Strings(plan.Modified)
+	sort.Strings(plan.Removed)
+
+	return plan
+}
+
+func mergeReloadableConfig(current, next config.Config) config.Config {
+	current.Logging = next.Logging
+	current.Defaults = next.Defaults
+	current.Servers = next.Servers
+	return current
+}
+
+func warnUnsupportedReloadChanges(log interface{ Warn(...interface{}) }, current, next config.Config) {
+	if !reflect.DeepEqual(current.Api, next.Api) {
+		log.Warn("Reload does not reconfigure the API server; restart required for [api] changes")
+	}
+	if !reflect.DeepEqual(current.Metrics, next.Metrics) {
+		log.Warn("Reload does not reconfigure metrics; restart required for [metrics] changes")
+	}
+	if !reflect.DeepEqual(current.Profiler, next.Profiler) {
+		log.Warn("Reload does not reconfigure profiler; restart required for [profiler] changes")
+	}
+	if !reflect.DeepEqual(current.Acme, next.Acme) {
+		log.Warn("Reload does not reinitialize ACME settings; restart required for top-level [acme] changes")
+	}
 }
 
 /**

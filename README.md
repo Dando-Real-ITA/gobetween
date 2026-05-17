@@ -72,6 +72,23 @@
 * [Read Configuration Reference](https://github.com/yyyar/gobetween/wiki)
 * Execute `gobetween --help` for full help on all available commands and options.
 
+### Reload configuration
+
+`gobetween` now supports hot reload on `SIGHUP`: unchanged listeners keep running, while only added, removed, or modified servers are recreated.
+
+Examples:
+
+* `kill -HUP $(cat /run/gobetween.pid)`
+* `systemctl reload gobetween`
+
+For systemd, add an `ExecReload` entry to the service unit:
+
+```ini
+[Service]
+ExecStart=/usr/sbin/gobetween -c /etc/gobetween.toml --pidfile /run/gobetween.pid
+ExecReload=/bin/kill -s HUP $MAINPID
+```
+
 ## Hacking
 
 * Install Go 1.24+ https://golang.org/

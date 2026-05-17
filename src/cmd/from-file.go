@@ -7,14 +7,11 @@ package cmd
  */
 
 import (
-	"io/ioutil"
 	"log"
 
 	"github.com/spf13/cobra"
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/info"
-	"github.com/yyyar/gobetween/utils"
-	"github.com/yyyar/gobetween/utils/codec"
 )
 
 /**
@@ -37,19 +34,12 @@ var FromFileCmd = &cobra.Command{
 			return
 		}
 
-		data, err := ioutil.ReadFile(args[0])
+		setConfigLoader(func() (*config.Config, error) {
+			return loadConfigFromFile(args[0])
+		})
+
+		cfg, err := LoadConfig()
 		if err != nil {
-			log.Fatal(err)
-		}
-
-		var cfg config.Config
-
-		datastr := string(data)
-		if isConfigEnvVars {
-			datastr = utils.SubstituteEnvVars(datastr)
-		}
-
-		if err = codec.Decode(datastr, &cfg, format); err != nil {
 			log.Fatal(err)
 		}
 
@@ -58,6 +48,6 @@ var FromFileCmd = &cobra.Command{
 			Path string `json:"path"`
 		}{"file", args[0]}
 
-		start(&cfg)
+		start(cfg)
 	},
 }
