@@ -7,15 +7,11 @@ package cmd
  */
 
 import (
-	"io/ioutil"
 	"log"
-	"net/http"
 
 	"github.com/spf13/cobra"
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/info"
-	"github.com/yyyar/gobetween/utils"
-	"github.com/yyyar/gobetween/utils/codec"
 )
 
 /**
@@ -39,27 +35,12 @@ var FromUrlCmd = &cobra.Command{
 			return
 		}
 
-		client := http.Client{}
-		res, err := client.Get(args[0])
+		setConfigLoader(func() (*config.Config, error) {
+			return loadConfigFromURL(args[0])
+		})
+
+		cfg, err := LoadConfig()
 		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer res.Body.Close()
-
-		// Read response
-		content, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		datastr := string(content)
-		if isConfigEnvVars {
-			datastr = utils.SubstituteEnvVars(datastr)
-		}
-
-		var cfg config.Config
-		if err := codec.Decode(datastr, &cfg, format); err != nil {
 			log.Fatal(err)
 		}
 
@@ -68,6 +49,6 @@ var FromUrlCmd = &cobra.Command{
 			Url  string `json:"url"`
 		}{"url", args[0]}
 
-		start(&cfg)
+		start(cfg)
 	},
 }

@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/info"
-	"github.com/yyyar/gobetween/utils"
-	"github.com/yyyar/gobetween/utils/codec"
 )
 
 /* Parsed options */
@@ -46,28 +44,12 @@ var FromConsulCmd = &cobra.Command{
 			return
 		}
 
-		consulConfig.Address = args[0]
-		client, err := consul.NewClient(&consulConfig)
+		setConfigLoader(func() (*config.Config, error) {
+			return loadConfigFromConsul(args[0], consulKey, consulConfig)
+		})
+
+		cfg, err := LoadConfig()
 		if err != nil {
-			log.Fatal(err)
-		}
-
-		pair, _, err := client.KV().Get(consulKey, nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if pair == nil {
-			log.Fatal("Empty value for key " + consulKey)
-		}
-
-		datastr := string(pair.Value)
-		if isConfigEnvVars {
-			datastr = utils.SubstituteEnvVars(datastr)
-		}
-
-		var cfg config.Config
-		if err := codec.Decode(datastr, &cfg, format); err != nil {
 			log.Fatal(err)
 		}
 
@@ -75,8 +57,8 @@ var FromConsulCmd = &cobra.Command{
 			Kind string `json:"kind"`
 			Host string `json:"host"`
 			Key  string `json:"key"`
-		}{"consul", consulConfig.Address, consulKey}
+		}{"consul", args[0], consulKey}
 
-		start(&cfg)
+		start(cfg)
 	},
 }

@@ -8,7 +8,9 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/yyyar/gobetween/api"
@@ -88,7 +90,32 @@ func main() {
 		// Start API
 		api.Start((*cfg).Api)
 
+		go reloadOnSignal()
+
 		// block forever
 		<-(chan string)(nil)
 	})
+}
+
+func reloadOnSignal() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGHUP)
+
+	for range signals {
+		log.Println("Received SIGHUP, reloading configuration")
+
+		cfg, err := cmd.LoadConfig()
+		if err != nil {
+			log.Println("Configuration reload failed:", err)
+			continue
+		}
+
+		if err := manager.Reload(*cfg); err != nil {
+			log.Println("Configuration reload failed:", err)
+			continue
+		}
+
+		logging.Configure(cfg.Logging.Output, cfg.Logging.Level, cfg.Logging.Format)
+		log.Println("Configuration reload completed")
+	}
 }
