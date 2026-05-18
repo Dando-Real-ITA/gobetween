@@ -103,8 +103,18 @@ type Server struct {
 	Bind string `toml:"bind" json:"bind"`
 
 	// Multiple bind addresses; expanded into separate listeners at startup.
-	// Mutually exclusive with Bind.
+	// Mutually exclusive with Bind, BindIPs, and BindPorts.
 	Binds []string `toml:"binds" json:"binds"`
+
+	// Array of IP addresses to bind to. When used with BindPorts,
+	// creates binds for all IP:port combinations.
+	// Mutually exclusive with Bind and Binds.
+	BindIPs []string `toml:"bind_ips" json:"bind_ips"`
+
+	// Array of ports to bind to. When used with BindIPs,
+	// creates binds for all IP:port combinations.
+	// Mutually exclusive with Bind and Binds.
+	BindPorts []int `toml:"bind_ports" json:"bind_ports"`
 
 	// When true, rewrite static discovery backend ports to match each bind's port
 	MatchPort bool `toml:"match_port" json:"match_port"`

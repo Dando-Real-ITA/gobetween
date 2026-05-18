@@ -811,18 +811,50 @@ type bindNameData struct {
  * expandBinds splits a server config that uses the `binds` list into one
  * config entry per address.  If `binds` is empty the original config is
  * returned unchanged (backward-compatible path).
+ *
+ * Also supports bind_ips and bind_ports arrays for generating all IP:port
+ * combinations (Cartesian product).
  */
 func expandBinds(name string, cfg config.Server) (map[string]config.Server, error) {
 	result := map[string]config.Server{}
+
+	// Count how many bind configurations are provided
+	hasBinds := len(cfg.Binds) > 0
+	hasIPsPorts := len(cfg.BindIPs) > 0 || len(cfg.BindPorts) > 0
+	hasSingleBind := cfg.Bind != ""
+
+	// Validate mutually exclusive options
+	if (hasSingleBind && hasBinds) || (hasSingleBind && hasIPsPorts) || (hasBinds && hasIPsPorts) {
+		return nil, fmt.Errorf("server %s: 'bind', 'binds', and 'bind_ips'/'bind_ports' are mutually exclusive; use only one", name)
+	}
+
+	// If using bind_ips and bind_ports, generate the Cartesian product
+	if hasIPsPorts {
+		if len(cfg.BindIPs) == 0 {
+			return nil, fmt.Errorf("server %s: 'bind_ips' must be non-empty when 'bind_ports' is specified", name)
+		}
+		if len(cfg.BindPorts) == 0 {
+			return nil, fmt.Errorf("server %s: 'bind_ports' must be non-empty when 'bind_ips' is specified", name)
+		}
+
+		// Generate all IP:port combinations
+		generatedBinds := make([]string, 0, len(cfg.BindIPs)*len(cfg.BindPorts))
+		for _, ip := range cfg.BindIPs {
+			for _, port := range cfg.BindPorts {
+				// Format IPv6 addresses with brackets
+				addr := formatBindAddress(ip, strconv.Itoa(port))
+				generatedBinds = append(generatedBinds, addr)
+			}
+		}
+		cfg.Binds = generatedBinds
+		cfg.BindIPs = nil
+		cfg.BindPorts = nil
+	}
 
 	if len(cfg.Binds) == 0 {
 		// Legacy single-bind path — pass through unchanged.
 		result[name] = cfg
 		return result, nil
-	}
-
-	if cfg.Bind != "" {
-		return nil, fmt.Errorf("cannot use both 'bind' and 'binds' for server %s; use one or the other", name)
 	}
 
 	// Determine the name template.
@@ -869,6 +901,18 @@ func expandBinds(name string, cfg config.Server) (map[string]config.Server, erro
 	}
 
 	return result, nil
+}
+
+/**
+ * formatBindAddress properly formats an IP address and port for binding.
+ * Handles IPv6 addresses by wrapping them in brackets.
+ */
+func formatBindAddress(ip, port string) string {
+	// Check if it's an IPv6 address (contains ':' and is not already bracketed)
+	if strings.Contains(ip, ":") && !strings.HasPrefix(ip, "[") {
+		return fmt.Sprintf("[%s]:%s", ip, port)
+	}
+	return net.JoinHostPort(ip, port)
 }
 
 /**
