@@ -46,12 +46,12 @@ func (b *WeightBalancer) Elect(context core.Context, backends []*core.Backend) (
 		}
 
 		if backend.Priority < 0 {
-			log.Warn("Ignoring invalid backend priority %v, should not be less than 0", backend.Priority)
+			log.Warnf("Ignoring invalid backend priority %v, should not be less than 0", backend.Priority)
 			continue
 		}
 
 		if backend.Weight < 0 {
-			log.Warn("Ignoring invalid backend weight %v, should not be less than 0", backend.Weight)
+			log.Warnf("Ignoring invalid backend weight %v, should not be less than 0", backend.Weight)
 			continue
 		}
 
