@@ -897,6 +897,10 @@ func expandBinds(name string, cfg config.Server) (map[string]config.Server, erro
 			child.Discovery = rewriteStaticListPorts(child.Discovery, port)
 		}
 
+		if _, exists := result[childName]; exists {
+			return nil, fmt.Errorf("duplicate expanded server name %q in server %s (bind %s); adjust bind_name_template to produce unique names", childName, name, addr)
+		}
+
 		result[childName] = child
 	}
 

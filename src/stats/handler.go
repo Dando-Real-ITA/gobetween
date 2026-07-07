@@ -106,7 +106,10 @@ func (this *Handler) Start() {
 				this.BackendsCounter.Stop()
 
 				Store.Lock()
-				delete(Store.handlers, this.Name)
+				// Avoid deleting a newer handler with the same name after reload.
+				if current, ok := Store.handlers[this.Name]; ok && current == this {
+					delete(Store.handlers, this.Name)
+				}
 				Store.Unlock()
 
 				// close channels

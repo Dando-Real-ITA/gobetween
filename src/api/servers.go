@@ -70,7 +70,20 @@ func attachServers(app *gin.RouterGroup) {
 	 */
 	app.GET("/servers/:name/stats", func(c *gin.Context) {
 		name := c.Param("name")
-		c.IndentedJSON(http.StatusOK, stats.GetStats(name))
+
+		// Distinguish "unknown server" from a real stats payload.
+		if manager.Get(name) == nil {
+			c.IndentedJSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+			return
+		}
+
+		serverStats := stats.GetStats(name)
+		if serverStats == nil {
+			c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": "Stats handler is not initialized for this server"})
+			return
+		}
+
+		c.IndentedJSON(http.StatusOK, serverStats)
 	})
 
 }
