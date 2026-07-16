@@ -26,6 +26,7 @@ import (
 	"github.com/yyyar/gobetween/logging"
 	"github.com/yyyar/gobetween/server"
 	"github.com/yyyar/gobetween/service"
+	"github.com/yyyar/gobetween/utils"
 	"github.com/yyyar/gobetween/utils/codec"
 	"github.com/yyyar/gobetween/utils/profiler"
 )
@@ -103,6 +104,11 @@ func normalizeDefaults(value config.ConnectionOptions) config.ConnectionOptions 
 	if value.BackendConnectionTimeout == nil {
 		value.BackendConnectionTimeout = new(string)
 		*value.BackendConnectionTimeout = "0"
+	}
+
+	if value.Sources == nil {
+		value.Sources = new(string)
+		*value.Sources = ""
 	}
 
 	return value
@@ -650,6 +656,12 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 		if (len(server.Tls.AcmeHosts) == 0) && ((server.Tls.KeyPath == "") || (server.Tls.CertPath == "")) {
 			return config.Server{}, errors.New("tls requires specify either acme hosts or both key and cert paths")
 		}
+	}
+
+	if server.Sources != nil && *server.Sources != "" {
+		if _, err := utils.NewIPv6SourcePool(*server.Sources); err != nil {
+			return config.Server{}, err
+		}
 
 	}
 
@@ -676,6 +688,10 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 
 		if server.Udp.MaxRequests == 0 && server.Udp.MaxResponses == 0 && server.ClientIdleTimeout == nil && server.BackendIdleTimeout == nil {
 			return config.Server{}, errors.New("udp protocol requires to specify at least one of (client|backend)_idle_timeout, udp.max_requests, udp.max_responses")
+		}
+
+		if server.Udp.Transparent && server.Sources != nil && *server.Sources != "" {
+			return config.Server{}, errors.New("sources should not be enabled for udp transparent mode")
 		}
 
 	default:
@@ -792,6 +808,11 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 	if server.BackendConnectionTimeout == nil {
 		server.BackendConnectionTimeout = new(string)
 		*server.BackendConnectionTimeout = *defaults.BackendConnectionTimeout
+	}
+
+	if server.Sources == nil {
+		server.Sources = new(string)
+		*server.Sources = *defaults.Sources
 	}
 
 	return server, nil

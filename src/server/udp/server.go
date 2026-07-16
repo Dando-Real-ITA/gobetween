@@ -54,6 +54,9 @@ type Server struct {
 	/* Stop channel */
 	stop chan bool
 
+	/* Source ip pool used for backend connections */
+	sourcePool *utils.SourcePool
+
 	/* ----- modules ----- */
 
 	/* Access module checks if client is allowed to connect */
@@ -132,6 +135,14 @@ func New(name string, cfg config.Server) (*Server, error) {
 		scheduler: scheduler,
 		stop:      make(chan bool),
 		sessions:  make(map[string]*session.Session),
+	}
+
+	if cfg.Sources != nil && *cfg.Sources != "" {
+		sourcePool, err := utils.NewIPv6SourcePool(*cfg.Sources)
+		if err != nil {
+			return nil, err
+		}
+		server.sourcePool = sourcePool
 	}
 
 	/* Add access if needed */
@@ -332,7 +343,11 @@ func (this *Server) electAndConnect(pool *connPool, clientAddr *net.UDPAddr) (ne
 			return nil, nil, fmt.Errorf("Could not dial UDP addr %v from %v: %v", addr, clientAddr, err)
 		}
 	} else {
-		conn, err = net.DialUDP("udp", nil, addr)
+		var sourceAddr *net.UDPAddr
+		if sourceIP := this.sourcePool.Next(); sourceIP != nil {
+			sourceAddr = &net.UDPAddr{IP: sourceIP}
+		}
+		conn, err = net.DialUDP("udp", sourceAddr, addr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Could not dial UDP addr %v: %v", addr, err)
 		}

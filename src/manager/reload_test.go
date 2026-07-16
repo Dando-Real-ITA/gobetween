@@ -51,6 +51,7 @@ func TestPlanReloadClassifiesServerChanges(t *testing.T) {
 func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	defaults := normalizeDefaults(config.ConnectionOptions{
 		MaxConnections: intPtr(25),
+		Sources:        stringPtr("2001:db8::/64"),
 	})
 
 	cfg := config.Config{
@@ -73,10 +74,54 @@ func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	if server.MaxConnections == nil || *server.MaxConnections != 25 {
 		t.Fatalf("expected default max_connections to be applied, got %#v", server.MaxConnections)
 	}
+
+	if server.Sources == nil || *server.Sources != "2001:db8::/64" {
+		t.Fatalf("expected default sources to be applied, got %#v", server.Sources)
+	}
 }
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func TestPrepareConfigRejectsInvalidSources(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		ConnectionOptions: config.ConnectionOptions{
+			Sources: stringPtr("bad-cidr"),
+		},
+		Bind:      "127.0.0.1:3000",
+		Protocol:  "tcp",
+		Balance:   "roundrobin",
+		Discovery: &config.DiscoveryConfig{Kind: "static", StaticDiscoveryConfig: &config.StaticDiscoveryConfig{StaticList: []string{"127.0.0.1:8080"}}},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected invalid ipv6 sources to fail")
+	}
+}
+
+func TestPrepareConfigRejectsSourcesForUDPTransparentMode(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		ConnectionOptions: config.ConnectionOptions{
+			Sources: stringPtr("2001:db8::/64"),
+		},
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{Transparent: true, MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected sources with udp transparent mode to fail")
+	}
 }
 
 func TestReloadRecreatesModifiedServer(t *testing.T) {

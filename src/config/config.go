@@ -72,6 +72,7 @@ type ConnectionOptions struct {
 	ClientIdleTimeout        *string `toml:"client_idle_timeout" json:"client_idle_timeout"`
 	BackendIdleTimeout       *string `toml:"backend_idle_timeout" json:"backend_idle_timeout"`
 	BackendConnectionTimeout *string `toml:"backend_connection_timeout" json:"backend_connection_timeout"`
+	Sources                  *string `toml:"sources" json:"sources"`
 }
 
 /**

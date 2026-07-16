@@ -64,6 +64,9 @@ type Server struct {
 	/* Tls config used to connect to backends */
 	backendsTlsConfg *tls.Config
 
+	/* Source ip pool used for backend connections */
+	sourcePool *utils.SourcePool
+
 	/* Tls config used for incoming connections */
 	tlsConfig *tls.Config
 
@@ -116,6 +119,13 @@ func New(name string, cfg config.Server) (*Server, error) {
 	server.backendsTlsConfg, err = tlsutil.MakeBackendTLSConfig(cfg.BackendsTls)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Sources != nil && *cfg.Sources != "" {
+		server.sourcePool, err = utils.NewIPv6SourcePool(*cfg.Sources)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	log.Info("Creating '", name, "': ", cfg.Bind, " ", cfg.Balance, " ", cfg.Discovery.Kind, " ", cfg.Healthcheck.Kind)
@@ -313,14 +323,19 @@ func (this *Server) handle(ctx *core.TcpContext) {
 
 	/* Connect to backend */
 	var backendConn net.Conn
+	dialer := &net.Dialer{
+		Timeout: utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0),
+	}
+
+	if sourceIP := this.sourcePool.Next(); sourceIP != nil {
+		dialer.LocalAddr = &net.TCPAddr{IP: sourceIP}
+	}
 
 	if this.cfg.BackendsTls != nil {
-		backendConn, err = tls.DialWithDialer(&net.Dialer{
-			Timeout: utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0),
-		}, "tcp", backend.Address(), this.backendsTlsConfg)
+		backendConn, err = tls.DialWithDialer(dialer, "tcp", backend.Address(), this.backendsTlsConfg)
 
 	} else {
-		backendConn, err = net.DialTimeout("tcp", backend.Address(), utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0))
+		backendConn, err = dialer.Dial("tcp", backend.Address())
 	}
 
 	if err != nil {
