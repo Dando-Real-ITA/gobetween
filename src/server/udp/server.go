@@ -25,6 +25,7 @@ import (
 	"github.com/yyyar/gobetween/server/udp/session"
 	"github.com/yyyar/gobetween/stats"
 	"github.com/yyyar/gobetween/utils"
+	"github.com/yyyar/gobetween/utils/proxyprotocol"
 )
 
 const UDP_PACKET_SIZE = 65507
@@ -401,6 +402,21 @@ func (this *Server) getOrCreateSession(cfg session.Config, clientAddr *net.UDPAd
  */
 func (this *Server) proxy(cfg session.Config, clientAddr *net.UDPAddr, buf []byte) {
 
+	if this.cfg.ProxyProtocol != nil {
+		switch this.cfg.ProxyProtocol.Version {
+		case "2":
+			wrapped, err := proxyprotocol.PrependProxyProtocolV2Datagram(clientAddr, this.serverConn.LocalAddr(), buf)
+			if err != nil {
+				log.Errorf("Could not prepend proxy protocol header: %v", err)
+				return
+			}
+			buf = wrapped
+		default:
+			log.Errorf("Unsupported proxy_protocol version %s for udp", this.cfg.ProxyProtocol.Version)
+			return
+		}
+	}
+
 	s, err := this.getOrCreateSession(cfg, clientAddr)
 	if err != nil {
 		log.Error(err)
@@ -419,6 +435,18 @@ func (this *Server) proxy(cfg session.Config, clientAddr *net.UDPAddr, buf []byt
  * Omit creating session, just send one packet of data
  */
 func (this *Server) fireAndForget(pool *connPool, clientAddr *net.UDPAddr, buf []byte) error {
+	if this.cfg.ProxyProtocol != nil {
+		switch this.cfg.ProxyProtocol.Version {
+		case "2":
+			wrapped, err := proxyprotocol.PrependProxyProtocolV2Datagram(clientAddr, this.serverConn.LocalAddr(), buf)
+			if err != nil {
+				return fmt.Errorf("Could not prepend proxy protocol header: %v", err)
+			}
+			buf = wrapped
+		default:
+			return fmt.Errorf("Unsupported proxy_protocol version %s for udp", this.cfg.ProxyProtocol.Version)
+		}
+	}
 
 	conn, backend, err := this.electAndConnect(pool, clientAddr)
 	if err != nil {

@@ -4,22 +4,30 @@ import (
 	"bufio"
 	"net"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/core"
 )
 
 func TestPingSendsProxyHeaderWhenEnabled(t *testing.T) {
+	testPingSendsProxyHeaderWhenEnabled(t, "1")
+}
+
+func TestPingSendsProxyV2HeaderWhenEnabled(t *testing.T) {
+	testPingSendsProxyHeaderWhenEnabled(t, "2")
+}
+
+func testPingSendsProxyHeaderWhenEnabled(t *testing.T, version string) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen failed: %v", err)
 	}
 	defer ln.Close()
 
-	headerCh := make(chan string, 1)
+	headerCh := make(chan *proxyproto.Header, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		conn, err := ln.Accept()
@@ -30,12 +38,12 @@ func TestPingSendsProxyHeaderWhenEnabled(t *testing.T) {
 		defer conn.Close()
 
 		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		line, err := bufio.NewReader(conn).ReadString('\n')
+		header, err := proxyproto.Read(bufio.NewReader(conn))
 		if err != nil {
 			errCh <- err
 			return
 		}
-		headerCh <- line
+		headerCh <- header
 		errCh <- nil
 	}()
 
@@ -46,7 +54,7 @@ func TestPingSendsProxyHeaderWhenEnabled(t *testing.T) {
 	results := make(chan CheckResult, 1)
 	ping(target, config.HealthcheckConfig{
 		Timeout:       "2s",
-		ProxyProtocol: &config.ProxyProtocol{Version: "1"},
+		ProxyProtocol: &config.ProxyProtocol{Version: version},
 	}, results)
 
 	result := <-results
@@ -59,7 +67,14 @@ func TestPingSendsProxyHeaderWhenEnabled(t *testing.T) {
 	}
 
 	header := <-headerCh
-	if !strings.HasPrefix(header, "PROXY TCP4 ") {
-		t.Fatalf("expected proxy header, got %q", header)
+	wantVersion := byte(1)
+	if version == "2" {
+		wantVersion = 2
+	}
+	if header.Version != wantVersion {
+		t.Fatalf("unexpected proxy header version: got %d want %s", header.Version, version)
+	}
+	if header.Command != proxyproto.PROXY {
+		t.Fatalf("expected proxy command, got %v", header.Command)
 	}
 }

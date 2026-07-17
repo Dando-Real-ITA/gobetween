@@ -1,32 +1,12 @@
 package proxyprotocol
 
 import (
-	"fmt"
 	"net"
-	"strconv"
 
 	proxyproto "github.com/pires/go-proxyproto"
 )
 
-func addrToIPAndPort(addr net.Addr) (ip net.IP, port uint16, err error) {
-	ipString, portString, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return
-	}
-
-	ip = net.ParseIP(ipString)
-	if ip == nil {
-		err = fmt.Errorf("Could not parse IP")
-		return
-	}
-
-	p, err := strconv.ParseInt(portString, 10, 64)
-	if err != nil {
-		return
-	}
-	port = uint16(p)
-	return
-}
+var ErrInvalidProxyProtocolAddress = proxyproto.ErrInvalidAddress
 
 // / SendProxyProtocolV1 sends a proxy protocol v1 header to initialize the connection
 // / https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
@@ -36,30 +16,57 @@ func SendProxyProtocolV1(client net.Conn, backend net.Conn) error {
 
 // SendProxyProtocolV1Addrs sends a proxy protocol v1 header using explicit source and destination addresses.
 func SendProxyProtocolV1Addrs(source net.Addr, destination net.Addr, backend net.Conn) error {
-	sourceIP, _, err := addrToIPAndPort(source)
-	if err != nil {
-		return err
+	return SendProxyProtocolAddrs("1", source, destination, backend)
+}
+
+// SendProxyProtocolV2Addrs sends a proxy protocol v2 header using explicit source and destination addresses.
+func SendProxyProtocolV2Addrs(source net.Addr, destination net.Addr, backend net.Conn) error {
+	return SendProxyProtocolAddrs("2", source, destination, backend)
+}
+
+// SendProxyProtocolAddrs sends a proxy protocol header using explicit source and destination addresses.
+func SendProxyProtocolAddrs(version string, source net.Addr, destination net.Addr, backend net.Conn) error {
+	var versionByte byte
+	switch version {
+	case "1":
+		versionByte = 1
+	case "2":
+		versionByte = 2
+	default:
+		return proxyproto.ErrUnknownProxyProtocolVersion
 	}
 
-	_, _, err = addrToIPAndPort(destination)
-	if err != nil {
-		return err
+	header := proxyproto.HeaderProxyFromAddrs(versionByte, source, destination)
+	if header.Command == proxyproto.LOCAL {
+		return ErrInvalidProxyProtocolAddress
 	}
 
-	h := proxyproto.Header{
-		Version:         1,
-		SourceAddr:      source,
-		DestinationAddr: destination,
-	}
-	if sourceIP.To4() != nil {
-		h.TransportProtocol = proxyproto.TCPv4
-	} else {
-		h.TransportProtocol = proxyproto.TCPv6
+	if !header.TransportProtocol.IsStream() {
+		return ErrInvalidProxyProtocolAddress
 	}
 
-	_, err = h.WriteTo(backend)
-	if err != nil {
-		return err
+	_, err := header.WriteTo(backend)
+	return err
+}
+
+// PrependProxyProtocolV2Datagram prepends a v2 datagram PROXY header to a UDP payload.
+func PrependProxyProtocolV2Datagram(source net.Addr, destination net.Addr, payload []byte) ([]byte, error) {
+	header := proxyproto.HeaderProxyFromAddrs(2, source, destination)
+	if header.Command == proxyproto.LOCAL {
+		return nil, ErrInvalidProxyProtocolAddress
 	}
-	return nil
+
+	if !header.TransportProtocol.IsDatagram() {
+		return nil, ErrInvalidProxyProtocolAddress
+	}
+
+	headerBytes, err := header.Format()
+	if err != nil {
+		return nil, err
+	}
+
+	packet := make([]byte, 0, len(headerBytes)+len(payload))
+	packet = append(packet, headerBytes...)
+	packet = append(packet, payload...)
+	return packet, nil
 }

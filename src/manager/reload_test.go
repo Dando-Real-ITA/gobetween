@@ -124,6 +124,66 @@ func TestPrepareConfigRejectsSourcesForUDPTransparentMode(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigAllowsProxyProtocolV2ForTCP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:      "127.0.0.1:3000",
+		Protocol:  "tcp",
+		Balance:   "roundrobin",
+		Discovery: &config.DiscoveryConfig{Kind: "static", StaticDiscoveryConfig: &config.StaticDiscoveryConfig{StaticList: []string{"127.0.0.1:8080"}}},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "2",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err != nil {
+		t.Fatalf("expected proxy protocol v2 for tcp to be accepted, got %v", err)
+	}
+}
+
+func TestPrepareConfigAllowsProxyProtocolV2ForUDP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "2",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err != nil {
+		t.Fatalf("expected proxy protocol v2 for udp to be accepted, got %v", err)
+	}
+}
+
+func TestPrepareConfigRejectsProxyProtocolV1ForUDP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "1",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected proxy protocol v1 for udp to be rejected")
+	}
+	if !strings.Contains(err.Error(), "version 2 is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestReloadRecreatesModifiedServer(t *testing.T) {
 	cleanupManagerState(t)
 	t.Cleanup(func() { cleanupManagerState(t) })

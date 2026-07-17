@@ -57,21 +57,33 @@ func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResul
 
 	defer conn.Close()
 
-	if cfg.ProbeProtocol == "tcp" && cfg.ProxyProtocol != nil {
+	send := []byte(cfg.ProbeSend)
+	if cfg.ProxyProtocol != nil {
 		switch cfg.ProxyProtocol.Version {
-		case "1":
-			err = proxyprotocol.SendProxyProtocolV1Addrs(conn.LocalAddr(), conn.RemoteAddr(), conn)
-			if err != nil {
-				log.Debugf("Could not send proxy protocol header: %v", err)
-				return
+		case "1", "2":
+			switch cfg.ProbeProtocol {
+			case "tcp":
+				err = proxyprotocol.SendProxyProtocolAddrs(cfg.ProxyProtocol.Version, conn.LocalAddr(), conn.RemoteAddr(), conn)
+				if err != nil {
+					log.Debugf("Could not send proxy protocol header: %v", err)
+					return
+				}
+			case "udp":
+				if cfg.ProxyProtocol.Version != "2" {
+					log.Debugf("Proxy protocol version %s is not supported for udp probe healthcheck", cfg.ProxyProtocol.Version)
+					return
+				}
+				send, err = proxyprotocol.PrependProxyProtocolV2Datagram(conn.LocalAddr(), conn.RemoteAddr(), send)
+				if err != nil {
+					log.Debugf("Could not prepend proxy protocol datagram header: %v", err)
+					return
+				}
 			}
 		default:
 			log.Debugf("Unsupported proxy protocol version for probe healthcheck: %s", cfg.ProxyProtocol.Version)
 			return
 		}
 	}
-
-	send := []byte(cfg.ProbeSend)
 
 	recv := []byte(cfg.ProbeRecv)
 	recvLen := cfg.ProbeRecvLen

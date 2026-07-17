@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/consul/api v1.31.1
 	github.com/lxc/lxd v0.0.0-20200706202337-814c96fcec74
 	github.com/miekg/dns v1.1.63
-	github.com/pires/go-proxyproto v0.8.0
+	github.com/pires/go-proxyproto v0.11.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
@@ -94,7 +94,7 @@ require (
 	golang.org/x/arch v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20250215185904-eff6e970281f // indirect
 	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/term v0.31.0 // indirect

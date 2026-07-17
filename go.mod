@@ -79,7 +79,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
-	github.com/pires/go-proxyproto v0.8.0 // indirect
+	github.com/pires/go-proxyproto v0.11.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
@@ -95,7 +95,7 @@ require (
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20250215185904-eff6e970281f // indirect
 	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/term v0.31.0 // indirect

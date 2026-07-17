@@ -36,8 +36,8 @@ func ping(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResult
 		defer conn.Close()
 		if cfg.ProxyProtocol != nil {
 			switch cfg.ProxyProtocol.Version {
-			case "1":
-				err = proxyprotocol.SendProxyProtocolV1Addrs(conn.LocalAddr(), conn.RemoteAddr(), conn)
+			case "1", "2":
+				err = proxyprotocol.SendProxyProtocolAddrs(cfg.ProxyProtocol.Version, conn.LocalAddr(), conn.RemoteAddr(), conn)
 				if err != nil {
 					log.Debugf("Could not send proxy protocol header: %v", err)
 					checkResult.Status = Unhealthy

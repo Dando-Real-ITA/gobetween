@@ -351,9 +351,9 @@ func (this *Server) handle(ctx *core.TcpContext) {
 	/* Send proxy protocol header if configured */
 	if this.cfg.ProxyProtocol != nil {
 		switch this.cfg.ProxyProtocol.Version {
-		case "1":
-			log.Debug("Sending proxy_protocol v1 header ", clientConn.RemoteAddr(), " -> ", this.listener.Addr(), " -> ", backendConn.RemoteAddr())
-			err := proxyprotocol.SendProxyProtocolV1Addrs(clientConn.RemoteAddr(), clientConn.LocalAddr(), backendConn)
+		case "1", "2":
+			log.Debug("Sending proxy_protocol v", this.cfg.ProxyProtocol.Version, " header ", clientConn.RemoteAddr(), " -> ", this.listener.Addr(), " -> ", backendConn.RemoteAddr())
+			err := proxyprotocol.SendProxyProtocolAddrs(this.cfg.ProxyProtocol.Version, clientConn.RemoteAddr(), clientConn.LocalAddr(), backendConn)
 			if err != nil {
 				log.Error(err)
 				return
