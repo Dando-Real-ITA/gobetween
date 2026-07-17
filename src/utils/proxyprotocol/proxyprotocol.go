@@ -31,32 +31,7 @@ func addrToIPAndPort(addr net.Addr) (ip net.IP, port uint16, err error) {
 // / SendProxyProtocolV1 sends a proxy protocol v1 header to initialize the connection
 // / https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
 func SendProxyProtocolV1(client net.Conn, backend net.Conn) error {
-	sourceIP, _, err := addrToIPAndPort(client.RemoteAddr())
-	if err != nil {
-		return err
-	}
-
-	_, _, err = addrToIPAndPort(client.LocalAddr())
-	if err != nil {
-		return err
-	}
-
-	h := proxyproto.Header{
-		Version:         1,
-		SourceAddr:      client.RemoteAddr(),
-		DestinationAddr: client.LocalAddr(),
-	}
-	if sourceIP.To4() != nil {
-		h.TransportProtocol = proxyproto.TCPv4
-	} else {
-		h.TransportProtocol = proxyproto.TCPv6
-	}
-
-	_, err = h.WriteTo(backend)
-	if err != nil {
-		return nil
-	}
-	return nil
+	return SendProxyProtocolV1Addrs(client.RemoteAddr(), client.LocalAddr(), backend)
 }
 
 // SendProxyProtocolV1Addrs sends a proxy protocol v1 header using explicit source and destination addresses.

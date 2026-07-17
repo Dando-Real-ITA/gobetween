@@ -353,7 +353,7 @@ func (this *Server) handle(ctx *core.TcpContext) {
 		switch this.cfg.ProxyProtocol.Version {
 		case "1":
 			log.Debug("Sending proxy_protocol v1 header ", clientConn.RemoteAddr(), " -> ", this.listener.Addr(), " -> ", backendConn.RemoteAddr())
-			err := proxyprotocol.SendProxyProtocolV1(clientConn, backendConn)
+			err := proxyprotocol.SendProxyProtocolV1Addrs(clientConn.RemoteAddr(), clientConn.LocalAddr(), backendConn)
 			if err != nil {
 				log.Error(err)
 				return
