@@ -1,6 +1,6 @@
 module github.com/yyyar/gobetween
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/burntsushi/toml v0.3.1
@@ -12,11 +12,11 @@ require (
 	github.com/hashicorp/consul/api v1.31.1
 	github.com/lxc/lxd v0.0.0-20200706202337-814c96fcec74
 	github.com/miekg/dns v1.1.63
-	github.com/pires/go-proxyproto v0.11.0
+	github.com/pires/go-proxyproto v0.15.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
-	golang.org/x/crypto v0.37.0
+	golang.org/x/crypto v0.51.0
 )
 
 require (
@@ -93,13 +93,13 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20250215185904-eff6e970281f // indirect
-	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
-	golang.org/x/tools v0.30.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 	gopkg.in/httprequest.v1 v1.2.1 // indirect
