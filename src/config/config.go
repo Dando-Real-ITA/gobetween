@@ -72,6 +72,7 @@ type ConnectionOptions struct {
 	ClientIdleTimeout        *string `toml:"client_idle_timeout" json:"client_idle_timeout"`
 	BackendIdleTimeout       *string `toml:"backend_idle_timeout" json:"backend_idle_timeout"`
 	BackendConnectionTimeout *string `toml:"backend_connection_timeout" json:"backend_connection_timeout"`
+	Sources                  *string `toml:"sources" json:"sources"`
 }
 
 /**
@@ -328,6 +329,8 @@ type HealthcheckConfig struct {
 	Passes   int    `toml:"passes" json:"passes"`
 	Fails    int    `toml:"fails" json:"fails"`
 	Timeout  string `toml:"timeout" json:"timeout"`
+	// inherited from server config at runtime, not configurable under healthcheck
+	ProxyProtocol *ProxyProtocol `toml:"-" json:"-"`
 
 	// The liveness when a backend is first discovered (default healthy)
 	// healthy | unhealthy

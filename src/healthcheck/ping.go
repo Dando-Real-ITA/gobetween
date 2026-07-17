@@ -13,6 +13,7 @@ import (
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/core"
 	"github.com/yyyar/gobetween/logging"
+	"github.com/yyyar/gobetween/utils/proxyprotocol"
 )
 
 /**
@@ -32,8 +33,24 @@ func ping(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResult
 	if err != nil {
 		checkResult.Status = Unhealthy
 	} else {
-		checkResult.Status = Healthy
-		conn.Close()
+		defer conn.Close()
+		if cfg.ProxyProtocol != nil {
+			switch cfg.ProxyProtocol.Version {
+			case "1", "2":
+				err = proxyprotocol.SendProxyProtocolAddrs(cfg.ProxyProtocol.Version, conn.LocalAddr(), conn.RemoteAddr(), conn)
+				if err != nil {
+					log.Debugf("Could not send proxy protocol header: %v", err)
+					checkResult.Status = Unhealthy
+					break
+				}
+				checkResult.Status = Healthy
+			default:
+				log.Debugf("Unsupported proxy protocol version for ping healthcheck: %s", cfg.ProxyProtocol.Version)
+				checkResult.Status = Unhealthy
+			}
+		} else {
+			checkResult.Status = Healthy
+		}
 	}
 
 	select {

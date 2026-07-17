@@ -51,6 +51,7 @@ func TestPlanReloadClassifiesServerChanges(t *testing.T) {
 func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	defaults := normalizeDefaults(config.ConnectionOptions{
 		MaxConnections: intPtr(25),
+		Sources:        stringPtr("2001:db8::/64"),
 	})
 
 	cfg := config.Config{
@@ -73,10 +74,114 @@ func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	if server.MaxConnections == nil || *server.MaxConnections != 25 {
 		t.Fatalf("expected default max_connections to be applied, got %#v", server.MaxConnections)
 	}
+
+	if server.Sources == nil || *server.Sources != "2001:db8::/64" {
+		t.Fatalf("expected default sources to be applied, got %#v", server.Sources)
+	}
 }
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func TestPrepareConfigRejectsInvalidSources(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		ConnectionOptions: config.ConnectionOptions{
+			Sources: stringPtr("bad-cidr"),
+		},
+		Bind:      "127.0.0.1:3000",
+		Protocol:  "tcp",
+		Balance:   "roundrobin",
+		Discovery: &config.DiscoveryConfig{Kind: "static", StaticDiscoveryConfig: &config.StaticDiscoveryConfig{StaticList: []string{"127.0.0.1:8080"}}},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected invalid ipv6 sources to fail")
+	}
+}
+
+func TestPrepareConfigRejectsSourcesForUDPTransparentMode(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		ConnectionOptions: config.ConnectionOptions{
+			Sources: stringPtr("2001:db8::/64"),
+		},
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{Transparent: true, MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected sources with udp transparent mode to fail")
+	}
+}
+
+func TestPrepareConfigAllowsProxyProtocolV2ForTCP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:      "127.0.0.1:3000",
+		Protocol:  "tcp",
+		Balance:   "roundrobin",
+		Discovery: &config.DiscoveryConfig{Kind: "static", StaticDiscoveryConfig: &config.StaticDiscoveryConfig{StaticList: []string{"127.0.0.1:8080"}}},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "2",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err != nil {
+		t.Fatalf("expected proxy protocol v2 for tcp to be accepted, got %v", err)
+	}
+}
+
+func TestPrepareConfigAllowsProxyProtocolV2ForUDP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "2",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err != nil {
+		t.Fatalf("expected proxy protocol v2 for udp to be accepted, got %v", err)
+	}
+}
+
+func TestPrepareConfigRejectsProxyProtocolV1ForUDP(t *testing.T) {
+	_, err := prepareConfig("app", config.Server{
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+		ProxyProtocol: &config.ProxyProtocol{
+			Version: "1",
+		},
+	}, normalizeDefaults(config.ConnectionOptions{}))
+	if err == nil {
+		t.Fatal("expected proxy protocol v1 for udp to be rejected")
+	}
+	if !strings.Contains(err.Error(), "version 2 is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestReloadRecreatesModifiedServer(t *testing.T) {

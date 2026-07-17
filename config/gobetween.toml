@@ -55,6 +55,7 @@ max_connections = 0              # Maximum simultaneous connections to the serve
 client_idle_timeout = "0"        # Client inactivity duration before forced connection drop
 backend_idle_timeout = "0"       # Backend inactivity duration before forced connection drop
 backend_connection_timeout = "0" # Backend connection timeout (ignored in udp)
+sources = ""                     # IPv6 CIDR to allocate source addresses for backend connections (for example "2001:db8::/64")
 
 #
 ## Acme (letsencrypt) configuration.
@@ -138,6 +139,7 @@ protocol = "udp"
 #client_idle_timeout = "10m"
 #backend_idle_timeout = "10m"
 #backend_connection_timeout = "5s"
+#sources = "2001:db8::/64"
 #
 ## ---------------- backends tls properties ----------------- #
 #
@@ -206,7 +208,8 @@ protocol = "udp"
 ## For more details on PROXYPROTOCOL see https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt
 #
 #  [servers.default.proxy_protocol]  # (optional)
-#  version = "1"                     # (required) proxy protocol version. only "1" for now.
+#  version = "1"                     # (required) proxy protocol version: "1" or "2".
+#                                    # For server.protocol = "udp", only version "2" is supported.
 #
 ## -------------------- healthchecks ------------------------- #
 #

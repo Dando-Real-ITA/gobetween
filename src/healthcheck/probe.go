@@ -18,6 +18,7 @@ import (
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/core"
 	"github.com/yyyar/gobetween/logging"
+	"github.com/yyyar/gobetween/utils/proxyprotocol"
 )
 
 func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResult) {
@@ -26,7 +27,7 @@ func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResul
 	timeout, _ := time.ParseDuration(cfg.Timeout)
 
 	checkResult := CheckResult{
-		Status:   Unhealthy,
+		Status: Unhealthy,
 		Target: t,
 	}
 
@@ -57,6 +58,32 @@ func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResul
 	defer conn.Close()
 
 	send := []byte(cfg.ProbeSend)
+	if cfg.ProxyProtocol != nil {
+		switch cfg.ProxyProtocol.Version {
+		case "1", "2":
+			switch cfg.ProbeProtocol {
+			case "tcp":
+				err = proxyprotocol.SendProxyProtocolAddrs(cfg.ProxyProtocol.Version, conn.LocalAddr(), conn.RemoteAddr(), conn)
+				if err != nil {
+					log.Debugf("Could not send proxy protocol header: %v", err)
+					return
+				}
+			case "udp":
+				if cfg.ProxyProtocol.Version != "2" {
+					log.Debugf("Proxy protocol version %s is not supported for udp probe healthcheck", cfg.ProxyProtocol.Version)
+					return
+				}
+				send, err = proxyprotocol.PrependProxyProtocolV2Datagram(conn.LocalAddr(), conn.RemoteAddr(), send)
+				if err != nil {
+					log.Debugf("Could not prepend proxy protocol datagram header: %v", err)
+					return
+				}
+			}
+		default:
+			log.Debugf("Unsupported proxy protocol version for probe healthcheck: %s", cfg.ProxyProtocol.Version)
+			return
+		}
+	}
 
 	recv := []byte(cfg.ProbeRecv)
 	recvLen := cfg.ProbeRecvLen

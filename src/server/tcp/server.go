@@ -64,6 +64,9 @@ type Server struct {
 	/* Tls config used to connect to backends */
 	backendsTlsConfg *tls.Config
 
+	/* Source ip pool used for backend connections */
+	sourcePool *utils.SourcePool
+
 	/* Tls config used for incoming connections */
 	tlsConfig *tls.Config
 
@@ -85,6 +88,8 @@ func New(name string, cfg config.Server) (*Server, error) {
 
 	var err error = nil
 	statsHandler := stats.NewHandler(name)
+	healthcheckCfg := *cfg.Healthcheck
+	healthcheckCfg.ProxyProtocol = cfg.ProxyProtocol
 
 	// Create server
 	server := &Server{
@@ -98,7 +103,7 @@ func New(name string, cfg config.Server) (*Server, error) {
 		scheduler: scheduler.Scheduler{
 			Balancer:     balance.New(cfg.Sni, cfg.Balance),
 			Discovery:    discovery.New(cfg.Discovery.Kind, *cfg.Discovery),
-			Healthcheck:  healthcheck.New(cfg.Healthcheck.Kind, *cfg.Healthcheck),
+			Healthcheck:  healthcheck.New(healthcheckCfg.Kind, healthcheckCfg),
 			StatsHandler: statsHandler,
 		},
 	}
@@ -116,6 +121,13 @@ func New(name string, cfg config.Server) (*Server, error) {
 	server.backendsTlsConfg, err = tlsutil.MakeBackendTLSConfig(cfg.BackendsTls)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Sources != nil && *cfg.Sources != "" {
+		server.sourcePool, err = utils.NewIPv6SourcePool(*cfg.Sources)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	log.Info("Creating '", name, "': ", cfg.Bind, " ", cfg.Balance, " ", cfg.Discovery.Kind, " ", cfg.Healthcheck.Kind)
@@ -313,14 +325,19 @@ func (this *Server) handle(ctx *core.TcpContext) {
 
 	/* Connect to backend */
 	var backendConn net.Conn
+	dialer := &net.Dialer{
+		Timeout: utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0),
+	}
+
+	if sourceIP := this.sourcePool.Next(); sourceIP != nil {
+		dialer.LocalAddr = &net.TCPAddr{IP: sourceIP}
+	}
 
 	if this.cfg.BackendsTls != nil {
-		backendConn, err = tls.DialWithDialer(&net.Dialer{
-			Timeout: utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0),
-		}, "tcp", backend.Address(), this.backendsTlsConfg)
+		backendConn, err = tls.DialWithDialer(dialer, "tcp", backend.Address(), this.backendsTlsConfg)
 
 	} else {
-		backendConn, err = net.DialTimeout("tcp", backend.Address(), utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0))
+		backendConn, err = dialer.Dial("tcp", backend.Address())
 	}
 
 	if err != nil {
@@ -334,9 +351,9 @@ func (this *Server) handle(ctx *core.TcpContext) {
 	/* Send proxy protocol header if configured */
 	if this.cfg.ProxyProtocol != nil {
 		switch this.cfg.ProxyProtocol.Version {
-		case "1":
-			log.Debug("Sending proxy_protocol v1 header ", clientConn.RemoteAddr(), " -> ", this.listener.Addr(), " -> ", backendConn.RemoteAddr())
-			err := proxyprotocol.SendProxyProtocolV1(clientConn, backendConn)
+		case "1", "2":
+			log.Debug("Sending proxy_protocol v", this.cfg.ProxyProtocol.Version, " header ", clientConn.RemoteAddr(), " -> ", this.listener.Addr(), " -> ", backendConn.RemoteAddr())
+			err := proxyprotocol.SendProxyProtocolAddrs(this.cfg.ProxyProtocol.Version, clientConn.RemoteAddr(), clientConn.LocalAddr(), backendConn)
 			if err != nil {
 				log.Error(err)
 				return
