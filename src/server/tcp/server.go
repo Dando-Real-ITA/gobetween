@@ -88,6 +88,8 @@ func New(name string, cfg config.Server) (*Server, error) {
 
 	var err error = nil
 	statsHandler := stats.NewHandler(name)
+	healthcheckCfg := *cfg.Healthcheck
+	healthcheckCfg.ProxyProtocol = cfg.ProxyProtocol
 
 	// Create server
 	server := &Server{
@@ -101,7 +103,7 @@ func New(name string, cfg config.Server) (*Server, error) {
 		scheduler: scheduler.Scheduler{
 			Balancer:     balance.New(cfg.Sni, cfg.Balance),
 			Discovery:    discovery.New(cfg.Discovery.Kind, *cfg.Discovery),
-			Healthcheck:  healthcheck.New(cfg.Healthcheck.Kind, *cfg.Healthcheck),
+			Healthcheck:  healthcheck.New(healthcheckCfg.Kind, healthcheckCfg),
 			StatsHandler: statsHandler,
 		},
 	}

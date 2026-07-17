@@ -329,6 +329,8 @@ type HealthcheckConfig struct {
 	Passes   int    `toml:"passes" json:"passes"`
 	Fails    int    `toml:"fails" json:"fails"`
 	Timeout  string `toml:"timeout" json:"timeout"`
+	// inherited from server config at runtime, not configurable under healthcheck
+	ProxyProtocol *ProxyProtocol `toml:"-" json:"-"`
 
 	// The liveness when a backend is first discovered (default healthy)
 	// healthy | unhealthy

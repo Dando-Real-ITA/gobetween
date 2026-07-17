@@ -18,6 +18,7 @@ import (
 	"github.com/yyyar/gobetween/config"
 	"github.com/yyyar/gobetween/core"
 	"github.com/yyyar/gobetween/logging"
+	"github.com/yyyar/gobetween/utils/proxyprotocol"
 )
 
 func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResult) {
@@ -26,7 +27,7 @@ func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResul
 	timeout, _ := time.ParseDuration(cfg.Timeout)
 
 	checkResult := CheckResult{
-		Status:   Unhealthy,
+		Status: Unhealthy,
 		Target: t,
 	}
 
@@ -55,6 +56,20 @@ func probe(t core.Target, cfg config.HealthcheckConfig, result chan<- CheckResul
 	}
 
 	defer conn.Close()
+
+	if cfg.ProbeProtocol == "tcp" && cfg.ProxyProtocol != nil {
+		switch cfg.ProxyProtocol.Version {
+		case "1":
+			err = proxyprotocol.SendProxyProtocolV1Addrs(conn.LocalAddr(), conn.RemoteAddr(), conn)
+			if err != nil {
+				log.Debugf("Could not send proxy protocol header: %v", err)
+				return
+			}
+		default:
+			log.Debugf("Unsupported proxy protocol version for probe healthcheck: %s", cfg.ProxyProtocol.Version)
+			return
+		}
+	}
 
 	send := []byte(cfg.ProbeSend)
 

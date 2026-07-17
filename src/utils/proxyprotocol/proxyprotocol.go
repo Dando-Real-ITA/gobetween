@@ -58,3 +58,33 @@ func SendProxyProtocolV1(client net.Conn, backend net.Conn) error {
 	}
 	return nil
 }
+
+// SendProxyProtocolV1Addrs sends a proxy protocol v1 header using explicit source and destination addresses.
+func SendProxyProtocolV1Addrs(source net.Addr, destination net.Addr, backend net.Conn) error {
+	sourceIP, _, err := addrToIPAndPort(source)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = addrToIPAndPort(destination)
+	if err != nil {
+		return err
+	}
+
+	h := proxyproto.Header{
+		Version:         1,
+		SourceAddr:      source,
+		DestinationAddr: destination,
+	}
+	if sourceIP.To4() != nil {
+		h.TransportProtocol = proxyproto.TCPv4
+	} else {
+		h.TransportProtocol = proxyproto.TCPv6
+	}
+
+	_, err = h.WriteTo(backend)
+	if err != nil {
+		return err
+	}
+	return nil
+}
