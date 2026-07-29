@@ -79,6 +79,34 @@ type Server struct {
 	access *access.Access
 }
 
+func (this *Server) configureClientKeepalive(conn net.Conn) {
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return
+	}
+
+	log := logging.For("server.keepalive")
+	enabled := this.cfg.ClientTcpKeepalive != nil && *this.cfg.ClientTcpKeepalive
+
+	if err := tcpConn.SetKeepAlive(enabled); err != nil {
+		log.Warn("Failed to configure client keepalive on ", conn.RemoteAddr(), ": ", err)
+		return
+	}
+
+	if !enabled || this.cfg.ClientTcpKeepalivePeriod == nil {
+		return
+	}
+
+	period := utils.ParseDurationOrDefault(*this.cfg.ClientTcpKeepalivePeriod, 0)
+	if period <= 0 {
+		return
+	}
+
+	if err := tcpConn.SetKeepAlivePeriod(period); err != nil {
+		log.Warn("Failed to set client keepalive period on ", conn.RemoteAddr(), ": ", err)
+	}
+}
+
 /**
  * Creates new server instance
  */
@@ -290,6 +318,8 @@ func (this *Server) Listen() (err error) {
 				return
 			}
 
+			this.configureClientKeepalive(conn)
+
 			go this.wrap(conn, sniEnabled)
 		}
 	}()
@@ -327,6 +357,15 @@ func (this *Server) handle(ctx *core.TcpContext) {
 	var backendConn net.Conn
 	dialer := &net.Dialer{
 		Timeout: utils.ParseDurationOrDefault(*this.cfg.BackendConnectionTimeout, 0),
+	}
+
+	if this.cfg.BackendTcpKeepalive != nil && !*this.cfg.BackendTcpKeepalive {
+		dialer.KeepAlive = -1
+	} else if this.cfg.BackendTcpKeepalivePeriod != nil {
+		period := utils.ParseDurationOrDefault(*this.cfg.BackendTcpKeepalivePeriod, 0)
+		if period > 0 {
+			dialer.KeepAlive = period
+		}
 	}
 
 	if sourceIP := this.sourcePool.Next(); sourceIP != nil {

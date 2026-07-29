@@ -106,6 +106,26 @@ func normalizeDefaults(value config.ConnectionOptions) config.ConnectionOptions 
 		*value.BackendConnectionTimeout = "0"
 	}
 
+	if value.ClientTcpKeepalive == nil {
+		value.ClientTcpKeepalive = new(bool)
+		*value.ClientTcpKeepalive = true
+	}
+
+	if value.ClientTcpKeepalivePeriod == nil {
+		value.ClientTcpKeepalivePeriod = new(string)
+		*value.ClientTcpKeepalivePeriod = "15s"
+	}
+
+	if value.BackendTcpKeepalive == nil {
+		value.BackendTcpKeepalive = new(bool)
+		*value.BackendTcpKeepalive = true
+	}
+
+	if value.BackendTcpKeepalivePeriod == nil {
+		value.BackendTcpKeepalivePeriod = new(string)
+		*value.BackendTcpKeepalivePeriod = "15s"
+	}
+
 	if value.Sources == nil {
 		value.Sources = new(string)
 		*value.Sources = ""
@@ -811,6 +831,26 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 	if server.BackendConnectionTimeout == nil {
 		server.BackendConnectionTimeout = new(string)
 		*server.BackendConnectionTimeout = *defaults.BackendConnectionTimeout
+	}
+
+	if server.ClientTcpKeepalive == nil {
+		server.ClientTcpKeepalive = new(bool)
+		*server.ClientTcpKeepalive = *defaults.ClientTcpKeepalive
+	}
+
+	if server.ClientTcpKeepalivePeriod == nil {
+		server.ClientTcpKeepalivePeriod = new(string)
+		*server.ClientTcpKeepalivePeriod = *defaults.ClientTcpKeepalivePeriod
+	}
+
+	if server.BackendTcpKeepalive == nil {
+		server.BackendTcpKeepalive = new(bool)
+		*server.BackendTcpKeepalive = *defaults.BackendTcpKeepalive
+	}
+
+	if server.BackendTcpKeepalivePeriod == nil {
+		server.BackendTcpKeepalivePeriod = new(string)
+		*server.BackendTcpKeepalivePeriod = *defaults.BackendTcpKeepalivePeriod
 	}
 
 	if server.Sources == nil {
