@@ -148,6 +148,53 @@ func TestPrepareConfigRejectsSourcesForUDPTransparentMode(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigNormalizesTCPKeepaliveFieldsForUDP(t *testing.T) {
+	server := config.Server{
+		Bind:     "127.0.0.1:3000",
+		Protocol: "udp",
+		Balance:  "roundrobin",
+		Udp:      &config.Udp{MaxRequests: 1},
+		Discovery: &config.DiscoveryConfig{
+			Kind: "static",
+			StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+				StaticList: []string{"127.0.0.1:8080"},
+			},
+		},
+	}
+
+	defaultsA := normalizeDefaults(config.ConnectionOptions{
+		ClientTcpKeepalive:        boolPtr(false),
+		ClientTcpKeepalivePeriod:  stringPtr("7s"),
+		BackendTcpKeepalive:       boolPtr(false),
+		BackendTcpKeepalivePeriod: stringPtr("9s"),
+	})
+
+	defaultsB := normalizeDefaults(config.ConnectionOptions{
+		ClientTcpKeepalive:        boolPtr(true),
+		ClientTcpKeepalivePeriod:  stringPtr("30s"),
+		BackendTcpKeepalive:       boolPtr(true),
+		BackendTcpKeepalivePeriod: stringPtr("45s"),
+	})
+
+	preparedA, err := prepareConfig("app", server, defaultsA)
+	if err != nil {
+		t.Fatalf("prepareConfig returned error for defaultsA: %v", err)
+	}
+
+	preparedB, err := prepareConfig("app", server, defaultsB)
+	if err != nil {
+		t.Fatalf("prepareConfig returned error for defaultsB: %v", err)
+	}
+
+	if preparedA.ClientTcpKeepalive != nil || preparedA.ClientTcpKeepalivePeriod != nil || preparedA.BackendTcpKeepalive != nil || preparedA.BackendTcpKeepalivePeriod != nil {
+		t.Fatalf("expected UDP server to normalize TCP keepalive fields to nil, got %#v", preparedA.ConnectionOptions)
+	}
+
+	if preparedB.ClientTcpKeepalive != nil || preparedB.ClientTcpKeepalivePeriod != nil || preparedB.BackendTcpKeepalive != nil || preparedB.BackendTcpKeepalivePeriod != nil {
+		t.Fatalf("expected UDP server to normalize TCP keepalive fields to nil, got %#v", preparedB.ConnectionOptions)
+	}
+}
+
 func TestPrepareConfigAllowsProxyProtocolV2ForTCP(t *testing.T) {
 	_, err := prepareConfig("app", config.Server{
 		Bind:      "127.0.0.1:3000",
