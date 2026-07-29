@@ -858,6 +858,14 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 		*server.Sources = *defaults.Sources
 	}
 
+	if server.Protocol == "udp" {
+		// TCP keepalive settings are not applicable to UDP and should not influence reload diffing.
+		server.ClientTcpKeepalive = nil
+		server.ClientTcpKeepalivePeriod = nil
+		server.BackendTcpKeepalive = nil
+		server.BackendTcpKeepalivePeriod = nil
+	}
+
 	return server, nil
 }
 
