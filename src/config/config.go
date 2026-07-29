@@ -68,11 +68,15 @@ type MetricsConfig struct {
  * Default values can be overridden in server
  */
 type ConnectionOptions struct {
-	MaxConnections           *int    `toml:"max_connections" json:"max_connections"`
-	ClientIdleTimeout        *string `toml:"client_idle_timeout" json:"client_idle_timeout"`
-	BackendIdleTimeout       *string `toml:"backend_idle_timeout" json:"backend_idle_timeout"`
-	BackendConnectionTimeout *string `toml:"backend_connection_timeout" json:"backend_connection_timeout"`
-	Sources                  *string `toml:"sources" json:"sources"`
+	MaxConnections            *int    `toml:"max_connections" json:"max_connections"`
+	ClientIdleTimeout         *string `toml:"client_idle_timeout" json:"client_idle_timeout"`
+	BackendIdleTimeout        *string `toml:"backend_idle_timeout" json:"backend_idle_timeout"`
+	BackendConnectionTimeout  *string `toml:"backend_connection_timeout" json:"backend_connection_timeout"`
+	ClientTcpKeepalive        *bool   `toml:"client_tcp_keepalive" json:"client_tcp_keepalive"`
+	ClientTcpKeepalivePeriod  *string `toml:"client_tcp_keepalive_period" json:"client_tcp_keepalive_period"`
+	BackendTcpKeepalive       *bool   `toml:"backend_tcp_keepalive" json:"backend_tcp_keepalive"`
+	BackendTcpKeepalivePeriod *string `toml:"backend_tcp_keepalive_period" json:"backend_tcp_keepalive_period"`
+	Sources                   *string `toml:"sources" json:"sources"`
 }
 
 /**

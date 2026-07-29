@@ -50,8 +50,12 @@ func TestPlanReloadClassifiesServerChanges(t *testing.T) {
 
 func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	defaults := normalizeDefaults(config.ConnectionOptions{
-		MaxConnections: intPtr(25),
-		Sources:        stringPtr("2001:db8::/64"),
+		MaxConnections:            intPtr(25),
+		ClientTcpKeepalive:        boolPtr(false),
+		ClientTcpKeepalivePeriod:  stringPtr("30s"),
+		BackendTcpKeepalive:       boolPtr(false),
+		BackendTcpKeepalivePeriod: stringPtr("45s"),
+		Sources:                   stringPtr("2001:db8::/64"),
 	})
 
 	cfg := config.Config{
@@ -78,6 +82,22 @@ func TestPrepareExpandedServersAppliesDefaultsToComparison(t *testing.T) {
 	if server.Sources == nil || *server.Sources != "2001:db8::/64" {
 		t.Fatalf("expected default sources to be applied, got %#v", server.Sources)
 	}
+
+	if server.ClientTcpKeepalive == nil || *server.ClientTcpKeepalive {
+		t.Fatalf("expected default client_tcp_keepalive to be false, got %#v", server.ClientTcpKeepalive)
+	}
+
+	if server.ClientTcpKeepalivePeriod == nil || *server.ClientTcpKeepalivePeriod != "30s" {
+		t.Fatalf("expected default client_tcp_keepalive_period to be applied, got %#v", server.ClientTcpKeepalivePeriod)
+	}
+
+	if server.BackendTcpKeepalive == nil || *server.BackendTcpKeepalive {
+		t.Fatalf("expected default backend_tcp_keepalive to be false, got %#v", server.BackendTcpKeepalive)
+	}
+
+	if server.BackendTcpKeepalivePeriod == nil || *server.BackendTcpKeepalivePeriod != "45s" {
+		t.Fatalf("expected default backend_tcp_keepalive_period to be applied, got %#v", server.BackendTcpKeepalivePeriod)
+	}
 }
 
 func intPtr(value int) *int {
@@ -85,6 +105,10 @@ func intPtr(value int) *int {
 }
 
 func stringPtr(value string) *string {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
 	return &value
 }
 
