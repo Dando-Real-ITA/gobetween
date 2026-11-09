@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	DEFAULT_BACKEND_PATTERN = `^(?P<host>\S+):(?P<port>\d+)(\sweight=(?P<weight>\d+))?(\spriority=(?P<priority>\d+))?(\smax_connections=(?P<max_connections>\d+))?(\ssni=(?P<sni>[^\s]+))?$`
+	DEFAULT_BACKEND_PATTERN = `^(?P<host>\S+):(?P<port>\d+)(\sweight=(?P<weight>\d+))?(\spriority=(?P<priority>\d+))?(\smax_connections=(?P<max_connections>\d+))?(\ssni=(?P<sni>[^\s]+))?(\s(?P<resolve>resolve))?$`
 )
 
 /**
@@ -25,6 +25,17 @@ const (
  */
 func ParseBackendDefault(line string) (*core.Backend, error) {
 	return ParseBackend(line, DEFAULT_BACKEND_PATTERN)
+}
+
+// HasResolveBackend reports whether a valid backend entry requests DNS refresh.
+func HasResolveBackend(lines []string) bool {
+	for _, line := range lines {
+		backend, err := ParseBackendDefault(line)
+		if err == nil && backend.Resolve {
+			return true
+		}
+	}
+	return false
 }
 
 /**
@@ -74,8 +85,9 @@ func ParseBackend(line string, pattern string) (*core.Backend, error) {
 		},
 		Weight:         weight,
 		MaxConnections: maxConnections,
-		Sni:           result["sni"],
-		Priority:      priority,
+		Sni:            result["sni"],
+		Priority:       priority,
+		Resolve:        result["resolve"] != "",
 		Stats: core.BackendStats{
 			Live: true,
 		},
