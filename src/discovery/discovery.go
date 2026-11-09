@@ -7,6 +7,7 @@ package discovery
  */
 
 import (
+	"sync"
 	"time"
 
 	"github.com/yyyar/gobetween/config"
@@ -85,7 +86,9 @@ type Discovery struct {
 	/**
 	 * Channel for stopping discovery
 	 */
-	stop chan bool
+	stop     chan struct{}
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
 /**
@@ -96,7 +99,8 @@ func (this *Discovery) Start() {
 	log := logging.For("discovery")
 
 	this.out = make(chan []core.Backend)
-	this.stop = make(chan bool)
+	this.stop = make(chan struct{})
+	this.done = make(chan struct{})
 
 	// Prepare interval
 	interval, err := time.ParseDuration(this.cfg.Interval)
@@ -104,8 +108,8 @@ func (this *Discovery) Start() {
 		log.Fatal(err)
 	}
 
-	// TODO: rewrite with channels for stop
 	go func() {
+		defer close(this.done)
 		for {
 			backends, err := this.fetch(this.cfg)
 
@@ -162,8 +166,7 @@ func (this *Discovery) send() bool {
 	select {
 	case <-this.stop:
 		return false
-	default:
-		this.out <- *this.backends
+	case this.out <- *this.backends:
 		return true
 	}
 }
@@ -176,15 +179,13 @@ func (this *Discovery) send() bool {
 func (this *Discovery) wait(interval time.Duration) bool {
 
 	t := time.NewTimer(interval)
+	defer t.Stop()
 
 	select {
 	case <-t.C:
 		return true
 
 	case <-this.stop:
-		if !t.Stop() {
-			<-t.C
-		}
 		return false
 	}
 
@@ -194,7 +195,11 @@ func (this *Discovery) wait(interval time.Duration) bool {
  * Stop discovery
  */
 func (this *Discovery) Stop() {
-	this.stop <- true
+	if this.done == nil {
+		return
+	}
+	this.stopOnce.Do(func() { close(this.stop) })
+	<-this.done
 }
 
 /**

@@ -20,6 +20,7 @@ type Backend struct {
 	Weight         int          `json:"weight"`
 	MaxConnections int          `json:"max_connections,omitempty"`
 	Sni            string       `json:"sni,omitempty"`
+	Resolve        bool         `json:"resolve,omitempty"`
 	Stats          BackendStats `json:"stats"`
 }
 
@@ -54,6 +55,7 @@ func (this *Backend) MergeFrom(other Backend) *Backend {
 	this.Weight = other.Weight
 	this.MaxConnections = other.MaxConnections
 	this.Sni = other.Sni
+	this.Resolve = other.Resolve
 
 	return this
 }
