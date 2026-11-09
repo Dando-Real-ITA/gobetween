@@ -28,6 +28,7 @@ import (
 	"github.com/yyyar/gobetween/service"
 	"github.com/yyyar/gobetween/utils"
 	"github.com/yyyar/gobetween/utils/codec"
+	"github.com/yyyar/gobetween/utils/parsers"
 	"github.com/yyyar/gobetween/utils/profiler"
 )
 
@@ -753,12 +754,29 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 		return config.Server{}, errors.New("Not supported failpolicy " + server.Discovery.Failpolicy)
 	}
 
+	resolveStatic := server.Discovery.Kind == "static" &&
+		server.Discovery.StaticDiscoveryConfig != nil &&
+		parsers.HasResolveBackend(server.Discovery.StaticList)
 	if server.Discovery.Interval == "" {
 		server.Discovery.Interval = "0"
+		if resolveStatic {
+			server.Discovery.Interval = "30s"
+		}
+	}
+	if interval, err := time.ParseDuration(server.Discovery.Interval); err != nil || interval < 0 {
+		return config.Server{}, errors.New("discovery interval must be a non-negative duration")
 	}
 
 	if server.Discovery.Timeout == "" {
 		server.Discovery.Timeout = "0"
+		if resolveStatic {
+			server.Discovery.Timeout = "5s"
+		}
+	}
+	if resolveStatic {
+		if timeout, err := time.ParseDuration(server.Discovery.Timeout); err != nil || timeout < 0 {
+			return config.Server{}, errors.New("discovery timeout must be a non-negative duration")
+		}
 	}
 
 	/* SRV Discovery */

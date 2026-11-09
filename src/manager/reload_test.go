@@ -112,6 +112,61 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
+func TestPrepareConfigStaticResolveDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, line, interval, timeout, wantInterval, wantTimeout string
+		invalid                                                  bool
+	}{
+		{name: "resolve defaults", line: "proxy.internal:0 resolve", wantInterval: "30s", wantTimeout: "5s"},
+		{name: "plain static", line: "127.0.0.1:8080", wantInterval: "0", wantTimeout: "0"},
+		{name: "explicit values", line: "proxy.internal:80 resolve", interval: "2s", timeout: "1s", wantInterval: "2s", wantTimeout: "1s"},
+		{name: "explicit one shot", line: "proxy.internal:80 resolve", interval: "0", timeout: "0", wantInterval: "0", wantTimeout: "0"},
+		{name: "negative interval", line: "proxy.internal:80 resolve", interval: "-1s", invalid: true},
+		{name: "invalid interval", line: "proxy.internal:80 resolve", interval: "bad", invalid: true},
+		{name: "negative timeout", line: "proxy.internal:80 resolve", timeout: "-1s", invalid: true},
+		{name: "invalid timeout", line: "proxy.internal:80 resolve", timeout: "bad", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, err := prepareConfig("app", config.Server{
+				Bind:     "127.0.0.1:3000",
+				Protocol: "tcp",
+				Discovery: &config.DiscoveryConfig{
+					Kind: "static", Interval: tc.interval, Timeout: tc.timeout,
+					StaticDiscoveryConfig: &config.StaticDiscoveryConfig{StaticList: []string{tc.line}},
+				},
+			}, normalizeDefaults(config.ConnectionOptions{}))
+			if tc.invalid {
+				if err == nil {
+					t.Fatal("expected invalid duration to fail")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if server.Discovery.Interval != tc.wantInterval || server.Discovery.Timeout != tc.wantTimeout {
+				t.Fatalf("got interval=%q timeout=%q, want %q %q", server.Discovery.Interval, server.Discovery.Timeout, tc.wantInterval, tc.wantTimeout)
+			}
+		})
+	}
+}
+
+func TestMatchPortPreservesStaticResolve(t *testing.T) {
+	discovery := &config.DiscoveryConfig{
+		Kind: "static",
+		StaticDiscoveryConfig: &config.StaticDiscoveryConfig{
+			StaticList: []string{"proxy.internal:0 weight=10 priority=10 resolve"},
+		},
+	}
+	rewritten := rewriteStaticListPorts(discovery, "8080")
+	if got := rewritten.StaticList[0]; got != "proxy.internal:8080 weight=10 priority=10 resolve" {
+		t.Fatalf("unexpected rewritten backend: %q", got)
+	}
+	if discovery.StaticList[0] != "proxy.internal:0 weight=10 priority=10 resolve" {
+		t.Fatal("port rewrite modified original discovery config")
+	}
+}
+
 func TestPrepareConfigRejectsInvalidSources(t *testing.T) {
 	_, err := prepareConfig("app", config.Server{
 		ConnectionOptions: config.ConnectionOptions{
