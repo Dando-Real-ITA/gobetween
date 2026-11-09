@@ -9,6 +9,7 @@ package tcp
 import (
 	"crypto/tls"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/yyyar/gobetween/balance"
@@ -59,7 +60,9 @@ type Server struct {
 	disconnect chan (net.Conn)
 
 	/* Stop channel */
-	stop chan bool
+	stop     chan struct{}
+	done     chan struct{}
+	stopOnce sync.Once
 
 	/* Tls config used to connect to backends */
 	backendsTlsConfg *tls.Config
@@ -123,7 +126,7 @@ func New(name string, cfg config.Server) (*Server, error) {
 	server := &Server{
 		name:         name,
 		cfg:          cfg,
-		stop:         make(chan bool),
+		stop:         make(chan struct{}),
 		disconnect:   make(chan net.Conn),
 		connect:      make(chan *core.TcpContext),
 		clients:      make(map[string]net.Conn),
@@ -181,7 +184,9 @@ func (this *Server) Start() error {
 		return err
 	}
 
+	this.done = make(chan struct{})
 	go func() {
+		defer close(this.done)
 
 		for {
 			select {
@@ -192,15 +197,15 @@ func (this *Server) Start() error {
 				this.HandleClientConnect(ctx)
 
 			case <-this.stop:
-				this.scheduler.Stop()
-				this.statsHandler.Stop()
 				if this.listener != nil {
 					this.listener.Close()
-					for _, conn := range this.clients {
-						conn.Close()
-					}
+				}
+				for _, conn := range this.clients {
+					conn.Close()
 				}
 				this.clients = make(map[string]net.Conn)
+				this.scheduler.Stop()
+				this.statsHandler.Stop()
 				return
 			}
 		}
@@ -259,7 +264,11 @@ func (this *Server) Stop() {
 	log := logging.For("server.Listen")
 	log.Info("Stopping ", this.name)
 
-	this.stop <- true
+	if this.done == nil {
+		return
+	}
+	this.stopOnce.Do(func() { close(this.stop) })
+	<-this.done
 }
 
 func (this *Server) wrap(conn net.Conn, sniEnabled bool) {
@@ -286,8 +295,8 @@ func (this *Server) wrap(conn net.Conn, sniEnabled bool) {
 	}
 
 	this.connect <- &core.TcpContext{
-		hostname,
-		conn,
+		Hostname: hostname,
+		Conn:     conn,
 	}
 
 }
