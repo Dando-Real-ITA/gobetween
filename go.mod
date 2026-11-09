@@ -4,6 +4,8 @@ go 1.25.0
 
 replace github.com/yyyar/gobetween => ./src
 
+replace github.com/eric-lindau/udpfacade => github.com/viecks/udpfacade v0.0.0-20190621043444-d8c1c27add16
+
 require github.com/yyyar/gobetween v0.0.0-20220331192546-6e185295c847
 
 require (

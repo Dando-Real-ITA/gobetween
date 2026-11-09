@@ -2,6 +2,8 @@ module github.com/yyyar/gobetween
 
 go 1.25.0
 
+replace github.com/eric-lindau/udpfacade => github.com/viecks/udpfacade v0.0.0-20190621043444-d8c1c27add16
+
 require (
 	github.com/burntsushi/toml v0.3.1
 	github.com/elgs/gojq v0.0.0-20230628214826-df5c4045598e
